@@ -1,0 +1,169 @@
+Carregando o arquivo do HDFS
+df = spark.read.csv('hdfs://172.18.0.4:9000/igti/part-m-00000')
+
+Alterando o nome das colunas:
+oldColumns = df.schema.names
+newColumns = ['codigo', 'nome', 'plataforma', 'ano', 'modalidade', 'fabricante', 'vnd_us', 'vnd_eu', 'vnd_jp', 'vnd_outros', 'vnd_total']
+
+Transformando em uma tabela para trabalhar com SQL
+df.createOrReplaceTempView('dados_game')
+
+for x in range(len(oldColumns)):
+    df = df.withColumnRenamed(oldColumns[x], newColumns[x])
+
+df.printSchema()
+ |-- codigo: string (nullable = true)
+ |-- nome: string (nullable = true)
+ |-- plataforma: string (nullable = true)
+ |-- ano: string (nullable = true)
+ |-- modalidade: string (nullable = true)
+ |-- fabricante: string (nullable = true)
+ |-- vnd_us: string (nullable = true)
+ |-- vnd_eu: string (nullable = true)
+ |-- vnd_jp: string (nullable = true)
+ |-- vnd_outros: string (nullable = true)
+ |-- vnd_total: string (nullable = true)
+
+Questão 1:
+- df.filter(df['ano'] == 1992).groupBy('ano').agg({'vnd_total':'sum'}).show()
+- spark.sql('select ano, sum(vnd_total) from dados_game where ano = 1992 group by ano').show()
+
++----+------------------------------+
+| ano|sum(CAST(vnd_total AS DOUBLE))|
++----+------------------------------+
+|1992|                          9.72|
++----+------------------------------+
+
+Questão 3:
+- q3 = df.groupBy('ano').agg({'vnd_total':'sum'})
+  q3.filter(q3['sum(vnd_total)'] > 20).show()
+- spark.sql('select ano, sum(vnd_total) from dados_game group by ano having sum(vnd_total) > 20').show()
+
++----+------------------------------+
+| ano|sum(CAST(vnd_total AS DOUBLE))|
++----+------------------------------+
+|1996|            24.310000000000002|
+|1997|                         23.34|
+|1999|                         27.24|
+|2005|                         20.45|
+|2009|                         37.03|
+|2011|                         34.05|
++----+------------------------------+
+
+Questão 6:
+- df.filter(df['ano'] == 1983).groupBy('ano').agg({'vnd_total':'sum'}).show()
+- spark.sql('select ano, sum(vnd_total) from dados_game where ano = 1983 group by ano').show()
+
++----+--------------+
+| ano|sum(vnd_total)|
++----+--------------+
+|1983|           5.2|
++----+--------------+
+
+Questão 7:
+- q7 = df.groupBy('ano').agg({'vnd_total':'sum'})
+  q7.filter(q7['sum(vnd_total)'] > 15).count()
+- spark.sql('select count(ano) from (select ano from dados_game group by ano having sum(vnd_total) > 15)').show()
+
++----------+                                                                    
+|count(ano)|
++----------+
+|        16|
++----------+
+
+
+Questão 9:
+- df.groupBy('modalidade').agg({'vnd_total':'sum'}).orderBy('sum(vnd_total)', ascending=False).show(3)
+- spark.sql('select modalidade, sum(vnd_total) from dados_game group by modalidade order by 2 desc limit 3').show()
+
++----------+------------------+
+|modalidade|    sum(vnd_total)|
++----------+------------------+
+|    Action|115.70000000000003|
+|    Sports|             90.39|
+|   Shooter| 63.82000000000001|
++----------+------------------+
+
+Questão 10:
+- q10 = df.groupBy('modalidade', 'ano').agg({'vnd_total':'sum'})
+  q10.filter(q10['modalidade'] == 'Adventure').show()
+- spark.sql("select modalidade, ano, sum(vnd_total) from dados_game where modalidade = 'Adventure' group by modalidade, ano").show()
+
++----------+----+--------------+
+|modalidade| ano|sum(vnd_total)|
++----------+----+--------------+
+| Adventure|2008|          3.14|
+| Adventure|1998|          3.34|
++----------+----+--------------+
+
+
+Questão 11:
+- q11 = df.groupby('modalidade','ano').agg({'vnd_total':'sum'}).orderBy('sum(vnd_total)', ascending=False)
+  q11.filter(q11['modalidade'] == 'Sports').show(1)
+- spark.sql("select modalidade, ano, sum(vnd_total) from dados_game where modalidade = 'Sports' group by modalidade, ano order by 3 desc limit 1").show()
+
++----------+----+------------------+
+|modalidade| ano|    sum(vnd_total)|
++----------+----+------------------+
+|    Sports|2004|12.080000000000002|
++----------+----+------------------+
+
+
+Questão 12:
+- q12 = df.groupBy('fabricante').agg({'vnd_total':'sum'})
+  q12.filter(df['fabricante'] == 'Electronic Arts').show()
+- spark.sql("select fabricante, sum(vnd_total) from dados_game where fabricante = 'Electronic Arts' group by fabricante").show()
+
++---------------+-----------------+
+|     fabricante|   sum(vnd_total)|
++---------------+-----------------+
+|Electronic Arts|65.47999999999999|
++---------------+-----------------+
+
+Questão 13:
+- q13 = df.groupby('fabricante').agg({'vnd_total':'sum'})
+  q13.filter(q13['fabricante'] == 'Activision').show()
+- spark.sql("select fabricante, sum(vnd_total) from dados_game where fabricante = 'Activision' group by fabricante").show()
++----------+------------------+                                                 
+|fabricante|    sum(vnd_total)|
++----------+------------------+
+|Activision|25.479999999999993|
++----------+------------------+
+
+
+Questão 14:
+- q14 = df.select('fabricante','ano','vnd_total').groupBy('fabricante','ano').agg({'vnd_total':'sum'})
+  q14.filter(q14['fabricante'] == 'Activision').orderBy('sum(vnd_total)', ascending=False).show()
+- spark.sql("select fabricante, ano, sum(vnd_total) from dados_game where fabricante = 'Activision' group by fabricante, ano order by 3 desc").show()
+
++----------+----+--------------+                                                
+|fabricante| ano|sum(vnd_total)|
++----------+----+--------------+
+|Activision|1999|          5.02|
+|Activision|2002|          4.48|
+|Activision|2007|          4.44|
+|Activision|2008|          3.04|
+|Activision|1980|          3.02|
+|Activision|2006|           2.7|
+|Activision|1982|          1.21|
+|Activision|1981|           1.1|
+|Activision|1989|          0.47|
++----------+----+--------------+
+
+
+Questão 15:
+- q15 = df.filter( ((df.ano>=1980) & (df.ano<=1989)) | ((df.ano>=1990) & (df.ano<=1999)) ).groupBy('fabricante')
+  q15.agg({'vnd_total':'sum'}).orderBy('sum(vnd_total)', ascending=False).show()
+- spark.sql("select fabricante, sum(vnd_total) from dados_game where ((ano>=1980 and ano<=1989) or (ano>=1990 and ano<=1999)) group by fabricante order by 2 desc").show()
+
++--------------------+------------------------------+
+|          fabricante|sum(CAST(vnd_total AS DOUBLE))|
++--------------------+------------------------------+
+|            Nintendo|             68.02000000000001|
+|Sony Computer Ent...|            20.460000000000004|
+|               Atari|                          14.3|
+|   Eidos Interactive|                         12.27|
+|          Activision|                         10.82|
++--------------------+------------------------------+
+
+
