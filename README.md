@@ -6,3 +6,4 @@ Lista dos desafios propostos e resolvidos durante o BootCamp
 - Módulo 02: Armazenamento de Dados
 - Módulo 03: Ecossistema Hadoop
 - Módulo 04: Infraestrutura e Arquitetura
+- Módulo Desafio: Colocar em prática o que foi aprendido.
