@@ -1,10 +1,15 @@
 from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
+from airflow.models import Variable
+from airflow.operators.python import PythonOperator, task
 from datetime import datetime
 
+import boto3
 import pandas as pd
 import pymongo
 import requests
+import sqlalchemy
+
+path = '/usr/local/airflow/data/'
 
 now = datetime.now()
 
@@ -16,8 +21,6 @@ default_args = {
     'email': ['nilson.cunhan@gmail.com'], # ativando e-mail
     'email_on_failure': False, # se der falha True envia e-mail
     'email_on_retry': False, # tenta enviar novamente,
-    #'retries': 1, # quantidade de tentativas
-    #'retry_delay': timedelta(minutes=1)
 }
 
 # Definindo a DAG - Fluxo
@@ -33,8 +36,6 @@ dag = DAG(
 # =====================================================================================
 
 # Obter os dados através da API do IBGE
-url = requests.get('https://servicodados.ibge.gov.br/api/v1/localidades/distritos')
-
 def tratar_dados_ibge(dados):
     '''
     Essa função retorna irá retornar uma lista por linha. A variável que receberá os dados dessa função
@@ -43,10 +44,8 @@ def tratar_dados_ibge(dados):
     :return: lista de dados
     '''
     df = pd.DataFrame(dados).reset_index(drop=True).iloc[:1]
-
     # Removendo as colunas que o pandas cria ao ler o Json
     df.drop(columns=['id', 'nome', 'municipio'], inplace=True)
-
     df['distrito_id'] = dados['id']
     df['distrito'] = dados['nome']
     df['municipio_id'] = dados['municipio']['id']
@@ -70,11 +69,11 @@ def obter_dados_ibge():
     Logo em seguida a função obter_dados_ibge irá concatenar essas listas gerando um dataframe final
     :return: dataframe
     '''
+    url = requests.get('https://servicodados.ibge.gov.br/api/v1/localidades/distritos')
     dados = url.json()
-
     df_preparar = [tratar_dados_ibge(dados[x]) for x in range(len(dados))]
     df_tratado = pd.concat(df_preparar, ignore_index=True)
-
+    df_tratado.to_csv(path+'ibge.csv', index=False, sep=',')
     print(df_tratado.shape)
 
 task_obter_dados_ibge = PythonOperator(
@@ -83,34 +82,73 @@ task_obter_dados_ibge = PythonOperator(
     dag=dag
 )
 
+def upload_dados_ibge():
+    access_key = Variable.get('aws_access_key_id')
+    secret_key = Variable.get('aws_secret_access_key')
+    s3 = boto3.client('s3', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+    s3.upload_file(path+'ibge.csv', "igti-bootcamp-ed-2021-184984191515", "ibge.csv")
+
+task_upload_dados_ibge = PythonOperator(
+    task_id='upload_dados_ibge',
+    python_callable=upload_dados_ibge,
+    dag=dag
+)
+
+def ingestao_dw_ibge():
+    aws_mysql_secret = Variable.get('aws_secret_access_mysql')
+    engine = sqlalchemy.create_engine(f'mysql://admin:{aws_mysql_secret}@database-igti.csptcgwoejic.sa-east-1.rds.amazonaws.com/dwigti')
+    ibge = pd.read_csv(path+'ibge.csv')
+    ibge.to_sql('tb_ibge', con=engine, index=False, if_exists='replace', method='multi', chunksize=1000)
+
+task_ingestao_dw_ibge = PythonOperator(
+    task_id='ingestao_dw_ibge',
+    python_callable=ingestao_dw_ibge,
+    dag=dag
+)
+
 # =====================================================================================
 #                                  Dados do API MongoDB
 # =====================================================================================
-
-def tratar_dados_api(dados):
-    '''
-    Essa função irá gerar uma lista para cada linha do json e retornará um conjunto de listas
-    :param dados: json API
-    :return: lista de dados
-    '''
-    # Passando os dados como lista, caso contrário ocorrerá erro.
-    df = pd.DataFrame([dados]).reset_index(drop=True).iloc[:1]
-
-    return df
 
 def obter_dados_api():
     client = pymongo.MongoClient("mongodb+srv://estudante_igti:SRwkJTDz2nA28ME9@unicluster.ixhvw.mongodb.net/")
     db = client.ibge
     query = db.pnadc20203.find({}, {'_id': 0}) # Retorna todos os dados da API
 
-    dados_api = []
-    for x in query:
-        dados_api.append(x)
+    df = pd.DataFrame(list(query))
+    df.to_csv(path+'api.csv', index=False, sep=',')
+    print(df.shape)
 
-    df_preparar_api = [tratar_dados_api(dados_api[x]) for x in range(len(dados_api))]
-    df_tratado_api = pd.concat(df_preparar_api, ignore_index=True)
+task_obter_dados_api = PythonOperator(
+    task_id='obter_dados_api',
+    python_callable=obter_dados_api,
+    dag=dag
+)
 
-    print(df_tratado_api.shape)
+def upload_dados_api():
+    access_key = Variable.get('aws_access_key_id')
+    secret_key = Variable.get('aws_secret_access_key')
+    s3 = boto3.client('s3', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+    s3.upload_file(path+'api.csv', "igti-bootcamp-ed-2021-184984191515", "api.csv")
 
+task_upload_dados_api = PythonOperator(
+    task_id='upload_dados_api',
+    python_callable=upload_dados_api,
+    dag=dag
+)
 
+def ingestao_dw_api():
+    aws_mysql_secret = Variable.get('aws_secret_access_mysql')
+    engine = sqlalchemy.create_engine(f'mysql://admin:{aws_mysql_secret}@database-igti.csptcgwoejic.sa-east-1.rds.amazonaws.com/dwigti')
+    api = pd.read_csv(path+'api.csv')
+    api_dw = api.loc[(api.idade >= 20) & (api.idade <= 40) & (api.sexo == 'Mulher')]
+    api_dw.to_sql('tb_api', con=engine, index=False, if_exists='replace', method='multi', chunksize=1000)
 
+task_ingestao_dw_api = PythonOperator(
+    task_id='ingestao_dw_api',
+    python_callable=ingestao_dw_api,
+    dag=dag
+)
+
+task_obter_dados_ibge >> [task_upload_dados_ibge, task_ingestao_dw_ibge]
+task_obter_dados_api >> [task_upload_dados_api, task_ingestao_dw_api]
