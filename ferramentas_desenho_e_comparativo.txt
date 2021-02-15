@@ -1,0 +1,18 @@
+###### Organizado por ordem de preferência
+
+- https://online.visual-paradigm.com/diagrams/
+
+## Exclusivo AWS
+- https://www.cloudcraft.co/
+
+## Próprio da AWS
+- https://aws.amazon.com/pt/solutions/implementations/aws-perspective/
+
+- https://www.lucidchart.com/
+
+- https://www.microsoft.com/pt-br/microsoft-365/visio/flowchart-software
+
+
+##### Comparativo dos serviços cloud
+
+http://comparecloud.in/
