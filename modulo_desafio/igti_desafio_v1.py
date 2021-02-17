@@ -85,8 +85,9 @@ task_obter_dados_ibge = PythonOperator(
 def upload_dados_ibge():
     access_key = Variable.get('aws_access_key_id')
     secret_key = Variable.get('aws_secret_access_key')
+    aws_s3_nome = Variable.get('aws_s3_nome')
     s3 = boto3.client('s3', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
-    s3.upload_file(path+'ibge.csv', "igti-bootcamp-ed-2021-184984191515", "ibge.csv")
+    s3.upload_file(path+'ibge.csv', aws_s3_nome, "ibge.csv")
 
 task_upload_dados_ibge = PythonOperator(
     task_id='upload_dados_ibge',
@@ -96,7 +97,8 @@ task_upload_dados_ibge = PythonOperator(
 
 def ingestao_dw_ibge():
     aws_mysql_secret = Variable.get('aws_secret_access_mysql')
-    engine = sqlalchemy.create_engine(f'mysql://admin:{aws_mysql_secret}@database-igti.csptcgwoejic.sa-east-1.rds.amazonaws.com/dwigti')
+    aws_server_mysql = Variable.get('aws_server_mysql')
+    engine = sqlalchemy.create_engine(f'mysql://admin:{aws_mysql_secret}@{aws_server_mysql}/dwigti')
     ibge = pd.read_csv(path+'ibge.csv')
     ibge.to_sql('tb_ibge', con=engine, index=False, if_exists='replace', method='multi', chunksize=1000)
 
@@ -111,7 +113,9 @@ task_ingestao_dw_ibge = PythonOperator(
 # =====================================================================================
 
 def obter_dados_api():
-    client = pymongo.MongoClient("mongodb+srv://estudante_igti:SRwkJTDz2nA28ME9@unicluster.ixhvw.mongodb.net/")
+    senha_igti = Variable.get('secret_igti_mongo')
+    usuario_igti = Variable.get('usuario_igti_mongo')
+    client = pymongo.MongoClient(f"mongodb+srv://{usuario_igti}:{senha_igti}@unicluster.ixhvw.mongodb.net/")
     db = client.ibge
     query = db.pnadc20203.find({}, {'_id': 0}) # Retorna todos os dados da API
 
@@ -128,8 +132,9 @@ task_obter_dados_api = PythonOperator(
 def upload_dados_api():
     access_key = Variable.get('aws_access_key_id')
     secret_key = Variable.get('aws_secret_access_key')
+    aws_s3_nome = Variable.get('aws_s3_nome')
     s3 = boto3.client('s3', aws_access_key_id=access_key, aws_secret_access_key=secret_key)
-    s3.upload_file(path+'api.csv', "igti-bootcamp-ed-2021-184984191515", "api.csv")
+    s3.upload_file(path+'api.csv', aws_s3_nome, "api.csv")
 
 task_upload_dados_api = PythonOperator(
     task_id='upload_dados_api',
@@ -139,7 +144,8 @@ task_upload_dados_api = PythonOperator(
 
 def ingestao_dw_api():
     aws_mysql_secret = Variable.get('aws_secret_access_mysql')
-    engine = sqlalchemy.create_engine(f'mysql://admin:{aws_mysql_secret}@database-igti.csptcgwoejic.sa-east-1.rds.amazonaws.com/dwigti')
+    aws_server_mysql = Variable.get('aws_server_mysql')
+    engine = sqlalchemy.create_engine(f'mysql://admin:{aws_mysql_secret}@{aws_server_mysql}/dwigti')
     api = pd.read_csv(path+'api.csv')
     api_dw = api.loc[(api.idade >= 20) & (api.idade <= 40) & (api.sexo == 'Mulher')]
     api_dw.to_sql('tb_api', con=engine, index=False, if_exists='replace', method='multi', chunksize=1000)
